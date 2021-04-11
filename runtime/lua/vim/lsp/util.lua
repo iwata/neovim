@@ -357,8 +357,11 @@ end
 --- Returns the range table for the difference between old and new lines
 --@param old_lines table list of lines
 --@param new_lines table list of lines
+--@param start_line_idx int line to begin search for first difference
+--@param end_line_idx int line to begin search for last difference
+--@param offset_encoding string encoding requested by language server
 --@returns table start_line_idx and start_col_idx of range
-function M.compute_diff(old_lines, new_lines, start_line_idx, end_line_idx)
+function M.compute_diff(old_lines, new_lines, start_line_idx, end_line_idx, offset_encoding)
   local start_line, start_char = first_difference(old_lines, new_lines, start_line_idx)
   local end_line, end_char = last_difference(vim.list_slice(old_lines, start_line, #old_lines),
       vim.list_slice(new_lines, start_line, #new_lines), start_char, end_line_idx)
@@ -373,10 +376,19 @@ function M.compute_diff(old_lines, new_lines, start_line_idx, end_line_idx)
     adj_end_char = #old_lines[#old_lines + end_line + 1] + end_char + 1
   end
 
+  local _
+  if offset_encoding == "utf-16" then
+    _, start_char = vim.str_utfindex(old_lines[start_line], start_char - 1)
+    _, end_char = vim.str_utfindex(old_lines[#old_lines + end_line + 1], adj_end_char)
+  else
+    start_char = start_char - 1
+    end_char = adj_end_char
+  end
+
   local result = {
     range = {
-      start = { line = start_line - 1, character = start_char - 1},
-      ["end"] = { line = adj_end_line, character = adj_end_char}
+      start = { line = start_line - 1, character = start_char},
+      ["end"] = { line = adj_end_line, character = end_char}
     },
     text = text,
     rangeLength = length + 1,
@@ -863,6 +875,16 @@ function M.make_floating_popup_options(width, height, opts)
     row = row + (opts.offset_y or 0),
     style = 'minimal',
     width = width,
+    border = opts.border or {
+      {"", "NormalFloat"},
+      {"", "NormalFloat"},
+      {"", "NormalFloat"},
+      {" ", "NormalFloat"},
+      {"", "NormalFloat"},
+      {"", "NormalFloat"},
+      {"", "NormalFloat"},
+      {" ", "NormalFloat"}
+    },
   }
 end
 
@@ -969,27 +991,20 @@ function M.focusable_preview(unique_name, fn)
   end)
 end
 
---- Trims empty lines from input and pad left and right with spaces
+--- Trims empty lines from input and pad top and bottom with empty lines
 ---
 ---@param contents table of lines to trim and pad
 ---@param opts dictionary with optional fields
----             - pad_left   number of columns to pad contents at left (default 1)
----             - pad_right  number of columns to pad contents at right (default 1)
 ---             - pad_top    number of lines to pad contents at top (default 0)
 ---             - pad_bottom number of lines to pad contents at bottom (default 0)
 ---@return contents table of trimmed and padded lines
-function M._trim_and_pad(contents, opts)
+function M._trim(contents, opts)
   validate {
     contents = { contents, 't' };
     opts = { opts, 't', true };
   }
   opts = opts or {}
-  local left_padding = (" "):rep(opts.pad_left or 1)
-  local right_padding = (" "):rep(opts.pad_right or 1)
   contents = M.trim_empty_lines(contents)
-  for i, line in ipairs(contents) do
-    contents[i] = string.format('%s%s%s', left_padding, line:gsub("\r", ""), right_padding)
-  end
   if opts.pad_top then
     for _ = 1, opts.pad_top do
       table.insert(contents, 1, "")
@@ -1066,8 +1081,8 @@ function M.fancy_floating_markdown(contents, opts)
       end
     end
   end
-  -- Clean up and add padding
-  stripped = M._trim_and_pad(stripped, opts)
+  -- Clean up
+  stripped = M._trim(stripped, opts)
 
   -- Compute size of float needed to show (wrapped) lines
   opts.wrap_at = opts.wrap_at or (vim.wo["wrap"] and api.nvim_win_get_width(0))
@@ -1223,7 +1238,7 @@ function M.open_floating_preview(contents, syntax, opts)
   opts = opts or {}
 
   -- Clean up input: trim empty lines from the end, pad
-  contents = M._trim_and_pad(contents, opts)
+  contents = M._trim(contents, opts)
 
   -- Compute size of float needed to show (wrapped) lines
   opts.wrap_at = opts.wrap_at or (vim.wo["wrap"] and api.nvim_win_get_width(0))

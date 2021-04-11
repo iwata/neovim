@@ -110,7 +110,7 @@ typedef uint16_t disptick_T;  // display tick type
 #include "nvim/regexp_defs.h"
 // for synstate_T (needs reg_extmatch_T, win_T, buf_T)
 #include "nvim/syntax_defs.h"
-// for signlist_T
+// for sign_entry_T
 #include "nvim/sign_defs.h"
 
 #include "nvim/os/fs_defs.h"    // for FileID
@@ -743,6 +743,11 @@ struct file_buffer {
   long b_p_wm;                  ///< 'wrapmargin'
   long b_p_wm_nobin;            ///< b_p_wm saved for binary mode
   long b_p_wm_nopaste;          ///< b_p_wm saved for paste mode
+  char_u *b_p_vsts;             ///< 'varsofttabstop'
+  long *b_p_vsts_array;          ///< 'varsofttabstop' in internal format
+  char_u *b_p_vsts_nopaste;     ///< b_p_vsts saved for paste mode
+  char_u *b_p_vts;              ///< 'vartabstop'
+  long *b_p_vts_array;           ///< 'vartabstop' in internal format
   char_u *b_p_keymap;           ///< 'keymap'
 
   // local values for options which are normally global
@@ -843,7 +848,7 @@ struct file_buffer {
                                 // normally points to this, but some windows
                                 // may use a different synblock_T.
 
-  signlist_T *b_signlist;       // list of signs to draw
+  sign_entry_T *b_signlist;     // list of placed signs
   int b_signcols_max;           // cached maximum number of sign columns
   int b_signcols;               // last calculated number of sign columns
 
@@ -1080,6 +1085,7 @@ typedef struct {
   bool focusable;
   WinStyle style;
   bool border;
+  bool shadow;
   schar_T border_chars[8];
   int border_hl_ids[8];
   int border_attr[8];
@@ -1196,6 +1202,7 @@ struct window_S {
     int tab1;                       ///< first tab character
     int tab2;                       ///< second tab character
     int tab3;                       ///< third tab character
+    int lead;
     int trail;
     int conceal;
   } w_p_lcs_chars;
@@ -1260,7 +1267,7 @@ struct window_S {
   int w_height_request;
   int w_width_request;
 
-  int w_border_adj;
+  int w_border_adj[4];  // top, right, bottom, left
   // outer size of window grid, including border
   int w_height_outer;
   int w_width_outer;
